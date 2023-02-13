@@ -20,3 +20,10 @@ jobs:
 
     - name: Format Terraform code
       run: terraform fmt -check=true
+      id: format
+      env:
+        TF_IN_AUTOMATION: 'true'
+
+    - name: Fail pull request if Terraform code is not formatted correctly
+      if: ${{ failure() }}
+      run: exit 1
