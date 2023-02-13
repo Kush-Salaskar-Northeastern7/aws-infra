@@ -7,6 +7,7 @@ on:
 
 jobs:
   terraform-fmt:
+    name: terraform-fmt
     runs-on: ubuntu-latest
 
     steps:
