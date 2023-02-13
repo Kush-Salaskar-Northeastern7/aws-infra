@@ -11,13 +11,13 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zones" {
-  type = list
+  type = list(any)
 }
 
 variable "public_subnet_cidr" {
-  type = list
+  type = list(any)
 }
 
 variable "private_subnet_cidr" {
-  type = list
+  type = list(any)
 }
