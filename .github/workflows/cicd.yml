@@ -21,7 +21,7 @@ jobs:
         done
 
     - name: Report status
-      uses: actions/github-script@v0.12
+      uses: actions/github-script@v0.11
       with:
         script: |
           github.repos.createStatus({
