@@ -36,6 +36,9 @@ jobs:
         done
 
     - name: Report status
-      run: echo "Terraform formatting complete"
-
-      if: always()
+      run: |
+        if [ $? -ne 0 ]; then
+          echo "::error::Terraform formatting failed"
+        else
+          echo "Terraform formatting complete"
+        fi 
