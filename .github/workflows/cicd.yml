@@ -13,32 +13,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
-      with:
-        terraform_version: 0.15.x
+    - name: terraform fmt
+        uses: dflook/terraform-fmt@v1
+        with:
+          path: my-terraform-config
 
-    - name: Get subdirectories
-      run: |
-        subdirs=$(find . -type d -not -path '*/\.*')
-
-    - name: Terraform Formatting
-      run: |
-        for subdir in $subdirs
-        do
-          cd $subdir
-          terraform fmt
-          if [ $? -ne 0 ]; then
-            echo "Terraform formatting failed in $subdir"
-            exit 1
-          fi
-          cd -
-        done
-
-    - name: Report status
-      run: |
-        if [ $? -ne 0 ]; then
-          echo "::error::Terraform formatting failed"
-        else
-          echo "Terraform formatting complete"
-        fi 
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v2
+        with:
+          commit-message: terraform fmt
+          title: Reformat terraform files
+          body: Update terraform files to canonical format using `terraform fmt`
+          branch: automated-terraform-fmt
