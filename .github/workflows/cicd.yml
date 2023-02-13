@@ -20,12 +20,3 @@ jobs:
 
     - name: Format Terraform code
       run: terraform fmt -check=true
-
-    - name: Report status
-      if: ${{ failure() }}
-      uses: peter-evans/report-status@v1
-      with:
-        status: error
-        message: Terraform code is not formatted correctly
-
-
