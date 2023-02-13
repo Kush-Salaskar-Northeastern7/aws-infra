@@ -13,22 +13,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Run terraform fmt on all subdirectories
+    - name: Run Terraform fmt
       run: |
-        for dir in $(find . -mindepth 1 -maxdepth 1 -type d); do
-          echo "Checking directory $dir"
-          (cd $dir && terraform fmt -check=true) || exit 1
+        for dir in $(find . -type d -name "*tf"); do
+          echo "Checking Terraform formatting in ${dir}..."
+          terraform fmt -check=true "${dir}"
         done
 
-    - name: Report status
-      uses: actions/github-script@v0.11
-      with:
-        script: |
-          github.repos.createStatus({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            sha: context.sha,
-            state: 'failure',
-            context: 'Terraform fmt check',
-            description: 'Terraform fmt check failed'
-          });
+    - name: Set outcome
+      run: |
+        if [ $? -ne 0 ]; then
+          echo ::error ::There was a Terraform formatting error.
+          exit 1
+        fi 
