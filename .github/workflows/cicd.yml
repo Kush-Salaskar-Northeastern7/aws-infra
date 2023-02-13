@@ -1,0 +1,30 @@
+name: Terraform Formatting
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  terraform-fmt:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: 0.15.x
+
+    - name: Terraform Format
+      run: terraform fmt -check=true
+      env:
+        TF_IN_AUTOMATION: "true"
+
+    - name: Reject Pull Request if Terraform Format is Incorrect
+      if: ${{ failure() }}
+      uses: peter-evans/reject-pr@v1
+      with:
+        reason: Terraform format is incorrect. Please run `terraform fmt` and resolve the formatting issues.
