@@ -21,8 +21,14 @@ jobs:
         done
 
     - name: Report status
-      uses: mshick/report-status@v1
+      uses: actions/github-script@v0.12
       with:
-        state: failure
-        description: Terraform fmt check failed
-        context: Terraform fmt check
+        script: |
+          github.repos.createStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            sha: context.sha,
+            state: 'failure',
+            context: 'Terraform fmt check',
+            description: 'Terraform fmt check failed'
+          });
