@@ -2,8 +2,7 @@ name: Terraform Formatting
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   terraform-fmt:
@@ -19,13 +18,5 @@ jobs:
       with:
         terraform_version: 0.15.x
 
-    - name: Terraform Format
+    - name: Format Terraform code
       run: terraform fmt -check=true
-      env:
-        TF_IN_AUTOMATION: "true"
-
-    - name: Reject Pull Request if Terraform Format is Incorrect
-      if: ${{ failure() }}
-      uses: peter-evans/reject-pr@v1
-      with:
-        reason: Terraform format is incorrect. Please run `terraform fmt` and resolve the formatting issues.
