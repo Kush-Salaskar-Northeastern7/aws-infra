@@ -26,4 +26,6 @@ jobs:
 
     - name: Fail pull request if Terraform code is not formatted correctly
       if: ${{ failure() }}
-      run: exit 1
+      run: |
+        echo "::error::Terraform code is not formatted correctly"
+        exit 1
