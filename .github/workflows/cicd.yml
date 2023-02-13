@@ -13,10 +13,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
-      with:
-        terraform_version: 0.15.x
+    - name: Run Terraform fmt
+      run: |
+        echo "Checking Terraform formatting in modules..."
+        terraform fmt -check=true modules
 
-    - name: Format Terraform code
-      run: terraform fmt -check=true
+    - name: Set outcome
+      run: |
+        if [ $? -ne 0 ]; then
+          echo ::error ::There was a Terraform formatting error.
+          exit 1
+        fi 
