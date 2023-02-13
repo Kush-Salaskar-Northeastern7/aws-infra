@@ -15,10 +15,8 @@ jobs:
 
     - name: Run Terraform fmt
       run: |
-        for dir in $(find . -type d -name "*tf"); do
-          echo "Checking Terraform formatting in ${dir}..."
-          terraform fmt -check=true "${dir}"
-        done
+        echo "Checking Terraform formatting in modules..."
+        terraform fmt -check=true modules
 
     - name: Set outcome
       run: |
