@@ -1,5 +1,5 @@
 module "networking" {
-  source = "./networking",
+  source = "./networking"
   region = var.region
   profile = var.profile
   availability_zones = var.availability_zones
