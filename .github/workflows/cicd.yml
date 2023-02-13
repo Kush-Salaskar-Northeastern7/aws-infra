@@ -13,15 +13,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: terraform fmt
-        uses: dflook/terraform-fmt@v1
-        with:
-          path: my-terraform-config
+    - name: Run terraform fmt on all subdirectories
+      run: |
+        for dir in $(find . -mindepth 1 -maxdepth 1 -type d); do
+          echo "Checking directory $dir"
+          (cd $dir && terraform fmt -check=true) || exit 1
+        done
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v2
-        with:
-          commit-message: terraform fmt
-          title: Reformat terraform files
-          body: Update terraform files to canonical format using `terraform fmt`
-          branch: automated-terraform-fmt
+    - name: Report status
+      uses: mshick/report-status@v1
+      with:
+        state: failure
+        description: Terraform fmt check failed
+        context: Terraform fmt check
