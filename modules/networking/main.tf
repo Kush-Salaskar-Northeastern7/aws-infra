@@ -52,3 +52,53 @@ resource "aws_route_table_association" "private_route_table_association" {
   subnet_id = aws_subnet.private_subnet[count.index].id
   route_table_id = aws_route_table.private_route_table.id
 }
+
+resource "aws_security_group" "application_sg" {
+  name_prefix = "application-sg-"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3001
+    to_port     = 3001
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "webserver" {
+  ami           = var.ami_id
+  instance_type = "t2.micro"
+  vpc_security_group_ids = [aws_security_group.application_sg.id]
+  subnet_id     = aws_subnet.public_subnet[1].id
+  associate_public_ip_address = true
+  root_block_device {
+    volume_size = 50
+    volume_type = "gp2"
+    delete_on_termination = true
+  }
+  tags = {
+    Name = "webserver"
+  }
+  # Disable termination protection
+  disable_api_termination = true
+}
