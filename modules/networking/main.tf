@@ -54,7 +54,9 @@ resource "aws_route_table_association" "private_route_table_association" {
 }
 
 resource "aws_security_group" "application_sg" {
-  name_prefix = "application-sg-"
+  name_prefix = "my_security_group"
+  vpc_id      = aws_vpc.vpc.id
+
 
   ingress {
     from_port   = 22
