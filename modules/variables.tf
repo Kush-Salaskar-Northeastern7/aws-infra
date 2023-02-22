@@ -21,3 +21,7 @@ variable "public_subnet_cidr" {
 variable "private_subnet_cidr" {
   type = list(any)
 }
+
+variable "ami_id" {
+  type = string
+}
