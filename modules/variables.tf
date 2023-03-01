@@ -10,6 +10,14 @@ variable "vpc_cidr" {
   type = string
 }
 
+variable "db_name" {
+  type = string
+}
+
+variable "db_password" {
+  type = string
+}
+
 variable "availability_zones" {
   type = list(any)
 }

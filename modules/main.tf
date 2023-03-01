@@ -7,4 +7,6 @@ module "networking" {
   public_subnet_cidr  = var.public_subnet_cidr
   private_subnet_cidr = var.private_subnet_cidr
   ami_id              = var.ami_id
+  db_name             = var.db_name
+  db_password         = var.db_password
 }
