@@ -6,6 +6,11 @@ variable "profile" {
   type = string
 }
 
+variable "domain" {
+  type = string
+  default = "kushsalaskar.me"
+}
+
 variable "vpc_cidr" {
   type = string
 }
