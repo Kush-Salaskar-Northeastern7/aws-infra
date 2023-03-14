@@ -6,6 +6,10 @@ variable "profile" {
   type = string
 }
 
+variable "domain_profile" {
+  type = string
+}
+
 variable "domain" {
   type = string
   default = "kushsalaskar.me"
