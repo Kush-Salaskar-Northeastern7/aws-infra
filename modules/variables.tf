@@ -11,7 +11,7 @@ variable "domain_profile" {
 }
 
 variable "domain" {
-  type = string
+  type    = string
   default = "kushsalaskar.me"
 }
 
