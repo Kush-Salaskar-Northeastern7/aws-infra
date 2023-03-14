@@ -285,3 +285,14 @@ resource "aws_db_instance" "rds_instance" {
   vpc_security_group_ids = [aws_security_group.database_sg.id]
 }
 
+data "aws_route53_zone" "profile" {
+  name = "${var.domain_profile}.${var.domain}"
+}
+
+resource "aws_route53_record" "example" {
+  zone_id = data.aws_route53_zone.profile.zone_id
+  name    = "${var.domain_profile}.${var.domain}"
+  type    = "A"
+  ttl     = "300"
+  records = [aws_instance.webserver.public_ip]
+}
