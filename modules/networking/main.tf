@@ -142,6 +142,8 @@ resource "aws_instance" "webserver" {
               sudo systemctl enable webapp
               sudo systemctl start webapp
               sudo pm2 reload all --update-env
+              sudo pm2 startOrReload ecosystem.config.js
+              sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/home/ec2-user/webapp/amazonCloudwatchConfig.json -s
               EOF
 }
 
@@ -246,6 +248,7 @@ resource "aws_iam_role" "ec2_role" {
       }
     ]
   })
+  managed_policy_arns = ["arn:aws:iam::aws:policy/CloudWatchAgentAdminPolicy"]
 }
 
 resource "aws_iam_role_policy_attachment" "webapp_s3_attachment" {
@@ -295,4 +298,24 @@ resource "aws_route53_record" "example" {
   type    = "A"
   ttl     = "300"
   records = [aws_instance.webserver.public_ip]
+}
+
+resource "aws_cloudwatch_log_group" "error_group" {
+  name = "app-error"
+  retention_in_days = 7
+}
+
+resource "aws_cloudwatch_log_stream" "error_stream" {
+  name = "app-error-stream"
+  log_group_name = aws_cloudwatch_log_group.error_group.name
+}
+
+resource "aws_cloudwatch_log_group" "output_group" {
+  name = "app-output"
+  retention_in_days = 7
+}
+
+resource "aws_cloudwatch_log_stream" "output_stream" {
+  name = "app-output-stream"
+  log_group_name = aws_cloudwatch_log_group.output_group.name
 }
