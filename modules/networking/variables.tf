@@ -10,6 +10,10 @@ variable "domain_profile" {
   type = string
 }
 
+variable "key_name" {
+  type = string
+}
+
 variable "domain" {
   type = string
   default = "kushsalaskar.me"

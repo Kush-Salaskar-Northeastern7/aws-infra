@@ -66,24 +66,10 @@ resource "aws_security_group" "application_sg" {
   }
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
     from_port   = 3001
     to_port     = 3001
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    security_groups = [aws_security_group.load_balancer_sg.id]
   }
 
   egress {
@@ -94,30 +80,37 @@ resource "aws_security_group" "application_sg" {
   }
 }
 
-resource "aws_iam_instance_profile" "webapp_instance_profile" {
-  name = "webapp_instance_profile"
-  role = aws_iam_role.ec2_role.name
+resource "aws_key_pair" "my_key_pair" {
+  key_name   = "my-key-pair-name"
+  public_key = file("~/.ssh/id_ed25519_Uni.pub")
 }
 
-resource "aws_instance" "webserver" {
-  ami                         = var.ami_id
-  instance_type               = "t2.micro"
-  vpc_security_group_ids      = [aws_security_group.application_sg.id]
-  subnet_id                   = aws_subnet.public_subnet[0].id
-  associate_public_ip_address = true
-  root_block_device {
-    volume_size           = 50
-    volume_type           = "gp2"
-    delete_on_termination = true
+resource "aws_launch_template" "asg_launch_template" {
+  name                 = "asg_launch_template"
+  image_id             = var.ami_id
+  instance_type        = "t2.micro"
+  key_name             = aws_key_pair.my_key_pair.key_name
+  disable_api_termination = false
+  ebs_optimized        = false
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_put_response_hop_limit = 1
+    http_tokens                 = "required"
   }
-  tags = {
-    Name = "webserver"
+  network_interfaces {
+    associate_public_ip_address = true
+    delete_on_termination       = true
+    security_groups = ["${aws_security_group.application_sg.id}"]
   }
-  iam_instance_profile = aws_iam_instance_profile.webapp_instance_profile.name
-  # Disable termination protection
-  disable_api_termination = true
-
-  user_data = <<-EOF
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = 50
+      volume_type = "gp2"
+      delete_on_termination = true
+    }
+  }
+  user_data = base64encode(<<-EOF
               #!/bin/bash
               yum update -y
               chmod 777 /etc/environment
@@ -145,7 +138,243 @@ resource "aws_instance" "webserver" {
               sudo pm2 startOrReload ecosystem.config.js
               sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/home/ec2-user/webapp/amazonCloudwatchConfig.json -s
               EOF
+              )
+  # iam_instance_profile = aws_iam_instance_profile.webapp_instance_profile.arn
+  iam_instance_profile {
+    arn = aws_iam_instance_profile.webapp_instance_profile.arn
+  }
+  # vpc_security_group_ids = [aws_security_group.application_sg.id]
 }
+
+# resource "aws_launch_configuration" "asg_launch_config" {
+#   name                 = "asg_launch_config"
+#   image_id             = var.ami_id
+#   instance_type        = "t2.micro"
+#   # key_name             = var.key_name
+#   associate_public_ip_address = true
+#   root_block_device {
+#     volume_size           = 50
+#     volume_type           = "gp2"
+#     delete_on_termination = true
+#   }
+#   user_data = <<-EOF
+#               #!/bin/bash
+#               yum update -y
+#               chmod 777 /etc/environment
+#               sed -i '/scripts-user/c\ - [scripts-user, always]' /etc/cloud/cloud.cfg
+#               cd /var/lib/cloud/scripts/per-boot/
+#               touch updateenv.sh
+#               cat > /var/lib/cloud/scripts/per-boot/updateenv.sh << 'EOL'
+#                 sudo pm2 reload all --update-env
+#               EOL
+#               cat > /etc/environment << 'EOL'
+#                 export DB_ADDRESS=${aws_db_instance.rds_instance.address}
+#                 export AWS_BUCKET_NAME=${aws_s3_bucket.private_bucket.id}
+#                 export AWS_BUCKET_REGION=${aws_s3_bucket.private_bucket.region}
+#                 export DB_NAME=${var.db_name}
+#                 export DB_PASSWORD=${var.db_password}
+#                 export DB_USER_NAME=${var.db_name}
+#               EOL
+#               source /etc/profile
+#               cd /home/ec2-user/webapp
+#               rm -rf node_modules
+#               sudo npm install
+#               sudo systemctl enable webapp
+#               sudo systemctl start webapp
+#               sudo pm2 reload all --update-env
+#               sudo pm2 startOrReload ecosystem.config.js
+#               sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/home/ec2-user/webapp/amazonCloudwatchConfig.json -s
+#               EOF
+#   iam_instance_profile = aws_iam_instance_profile.webapp_instance_profile.name
+#   security_groups      = [aws_security_group.application_sg.id]
+# }
+
+resource "aws_autoscaling_group" "asg" {
+  name                 = "webapp_asg"
+  launch_template { 
+    id = "${aws_launch_template.asg_launch_template.id}" 
+    version = "${aws_launch_template.asg_launch_template.latest_version}" 
+  }
+  # launch_template {
+  #   id      = aws_launch_template.asg_launch_template.id
+  #   version = "$Latest"
+  # }
+  # launch_configuration = aws_launch_configuration.asg_launch_config.id
+  # cooldown             = 60
+  min_size             = 1
+  max_size             = 3
+  desired_capacity     = 1
+  health_check_grace_period = 60
+  health_check_type = "EC2"
+  target_group_arns = [ aws_lb_target_group.web.arn ]
+  # availability_zones = var.availability_zones
+  vpc_zone_identifier = aws_subnet.public_subnet.*.id
+  tag {
+    key                 = "Name"
+    value               = "webapp"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_autoscaling_policy" "webapp_scale_up_policy" {
+    name                    = "webapp_scale_up_policy"
+    adjustment_type         = "ChangeInCapacity"
+    # scaling_adjustment      = 1
+    # cooldown                = 60
+    policy_type             = "TargetTrackingScaling"
+    target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+
+    target_value = 5.0
+  }
+    
+    autoscaling_group_name = aws_autoscaling_group.asg.name
+}
+
+resource "aws_autoscaling_policy" "webapp_scale_down_policy" {
+    name                    = "webapp_scale_down_policy"
+    adjustment_type         = "ChangeInCapacity"
+    # scaling_adjustment      = -1
+    # cooldown                = 60
+    policy_type             = "TargetTrackingScaling"
+    target_tracking_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+
+    target_value = 3.0
+  } 
+    autoscaling_group_name = aws_autoscaling_group.asg.name
+}
+
+# resource "aws_cloudwatch_metric_alarm" "up_alarm" {
+#   alarm_name          = "cloudwatch_scale_up_alarm"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = 1
+#   metric_name         = "CPUUtilization"
+#   namespace           = "AWS/EC2"
+#   period              = 60
+#   statistic           = "Average"
+#   threshold           = 5
+
+#   alarm_description = "This metric monitors ec2 high cpu utilization"
+#   alarm_actions     = [aws_autoscaling_policy.webapp_scale_up_policy.arn]
+# }
+
+# resource "aws_cloudwatch_metric_alarm" "down_alarm" {
+#   alarm_name          = "cloudwatch_scale_down_alarm"
+#   comparison_operator = "LessThanThreshold"
+#   evaluation_periods  = 1
+#   metric_name         = "CPUUtilization"
+#   namespace           = "AWS/EC2"
+#   period              = 60
+#   statistic           = "Average"
+#   threshold           = 3
+
+#   alarm_description = "This metric monitors ec2 low cpu utilization"
+#   alarm_actions     = [aws_autoscaling_policy.webapp_scale_down_policy.arn]
+# }
+
+resource "aws_lb" "web-alb" {
+  name               = "web-alb"
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.load_balancer_sg.id]
+  subnets            = aws_subnet.public_subnet.*.id
+
+  tags = {
+    Name = "web-alb"
+  }
+}
+
+resource "aws_lb_target_group" "web" {
+  name_prefix       = "webtg-"
+  port              = 3001
+  protocol          = "HTTP"
+  vpc_id            = aws_vpc.vpc.id
+  ip_address_type   = "ipv4"
+  target_type       = "instance"
+  health_check {
+    protocol     = "HTTP"
+    path         = "/healthz"
+    port         = 3001
+    interval     = 90
+    timeout      = 60
+    healthy_threshold = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "web-alb-target-group"
+  }
+}
+
+resource "aws_lb_listener" "lb_listener" {
+  load_balancer_arn = aws_lb.web-alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+  # ssl_policy        = "ELBSecurityPolicy-2016-08"
+  # certificate_arn   = "arn:aws:iam::187416307283:server-certificate/test_cert_rab3wuqwgja25ct3n4jdj2tzu4"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web.arn
+  }
+}
+
+resource "aws_iam_instance_profile" "webapp_instance_profile" {
+  name = "webapp_instance_profile"
+  role = aws_iam_role.ec2_role.name
+}
+
+# resource "aws_instance" "webserver" {
+#   ami                         = var.ami_id
+#   instance_type               = "t2.micro"
+#   vpc_security_group_ids      = [aws_security_group.application_sg.id]
+#   subnet_id                   = aws_subnet.public_subnet[0].id
+#   associate_public_ip_address = true
+#   root_block_device {
+#     volume_size           = 50
+#     volume_type           = "gp2"
+#     delete_on_termination = true
+#   }
+#   tags = {
+#     Name = "webserver"
+#   }
+#   iam_instance_profile = aws_iam_instance_profile.webapp_instance_profile.name
+#   # Disable termination protection
+#   disable_api_termination = true
+
+  # user_data = <<-EOF
+  #             #!/bin/bash
+  #             yum update -y
+  #             chmod 777 /etc/environment
+  #             sed -i '/scripts-user/c\ - [scripts-user, always]' /etc/cloud/cloud.cfg
+  #             cd /var/lib/cloud/scripts/per-boot/
+  #             touch updateenv.sh
+  #             cat > /var/lib/cloud/scripts/per-boot/updateenv.sh << 'EOL'
+  #               sudo pm2 reload all --update-env
+  #             EOL
+  #             cat > /etc/environment << 'EOL'
+  #               export DB_ADDRESS=${aws_db_instance.rds_instance.address}
+  #               export AWS_BUCKET_NAME=${aws_s3_bucket.private_bucket.id}
+  #               export AWS_BUCKET_REGION=${aws_s3_bucket.private_bucket.region}
+  #               export DB_NAME=${var.db_name}
+  #               export DB_PASSWORD=${var.db_password}
+  #               export DB_USER_NAME=${var.db_name}
+  #             EOL
+  #             source /etc/profile
+  #             cd /home/ec2-user/webapp
+  #             rm -rf node_modules
+  #             sudo npm install
+  #             sudo systemctl enable webapp
+  #             sudo systemctl start webapp
+  #             sudo pm2 reload all --update-env
+  #             sudo pm2 startOrReload ecosystem.config.js
+  #             sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/home/ec2-user/webapp/amazonCloudwatchConfig.json -s
+  #             EOF
+# }
 
 resource "aws_security_group" "database_sg" {
   name_prefix = "my_database_security_group"
@@ -165,6 +394,35 @@ resource "aws_security_group" "database_sg" {
     cidr_blocks = ["10.0.0.0/8"] # Restrict access to the instance from the internet
   }
 }
+
+resource "aws_security_group" "load_balancer_sg" {
+  name_prefix = "load-balancer-sg"
+  description = "Security group for the load balancer to access the web application"
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  vpc_id      = aws_vpc.vpc.id
+}
+
 
 resource "random_id" "random" {
   byte_length = 8
@@ -296,8 +554,11 @@ resource "aws_route53_record" "example" {
   zone_id = data.aws_route53_zone.profile.zone_id
   name    = "${var.domain_profile}.${var.domain}"
   type    = "A"
-  ttl     = "300"
-  records = [aws_instance.webserver.public_ip]
+  alias {
+    name                   = aws_lb.web-alb.dns_name
+    zone_id                = aws_lb.web-alb.zone_id
+    evaluate_target_health = true
+  }
 }
 
 resource "aws_cloudwatch_log_group" "error_group" {
