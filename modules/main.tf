@@ -11,4 +11,5 @@ module "networking" {
   ami_id              = var.ami_id
   db_name             = var.db_name
   db_password         = var.db_password
+  key_name            = var.key_name
 }
