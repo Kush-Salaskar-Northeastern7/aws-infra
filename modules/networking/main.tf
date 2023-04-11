@@ -108,6 +108,8 @@ resource "aws_launch_template" "asg_launch_template" {
       volume_size = 50
       volume_type = "gp2"
       delete_on_termination = true
+      encrypted = true
+      kms_key_id = aws_kms_key.ebs_key.arn 
     }
   }
   user_data = base64encode(<<-EOF
@@ -312,10 +314,9 @@ resource "aws_lb_target_group" "web" {
 
 resource "aws_lb_listener" "lb_listener" {
   load_balancer_arn = aws_lb.web-alb.arn
-  port              = "80"
-  protocol          = "HTTP"
-  # ssl_policy        = "ELBSecurityPolicy-2016-08"
-  # certificate_arn   = "arn:aws:iam::187416307283:server-certificate/test_cert_rab3wuqwgja25ct3n4jdj2tzu4"
+  port              = "443"
+  protocol          = "HTTPS"
+  certificate_arn   = "arn:aws:acm:us-east-1:562694632201:certificate/7563dd81-84d5-49e1-a166-65543f9bc3c0"
 
   default_action {
     type             = "forward"
@@ -530,6 +531,9 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
 }
 
 resource "aws_db_instance" "rds_instance" {
+  depends_on = [
+    aws_kms_key.rds_key
+  ]
   identifier             = "csye6225"
   engine                 = "postgres"
   engine_version         = "13"
@@ -544,6 +548,8 @@ resource "aws_db_instance" "rds_instance" {
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
   vpc_security_group_ids = [aws_security_group.database_sg.id]
+  storage_encrypted      = true
+  kms_key_id             = aws_kms_key.rds_key.arn
 }
 
 data "aws_route53_zone" "profile" {
@@ -580,3 +586,110 @@ resource "aws_cloudwatch_log_stream" "output_stream" {
   name = "app-output-stream"
   log_group_name = aws_cloudwatch_log_group.output_group.name
 }
+
+
+data "aws_caller_identity" "current" {}
+
+output "aws_account_id" {
+  value = data.aws_caller_identity.current.account_id
+}
+
+locals {
+  stack_name = replace(
+    "${element(split("/", var.terraform_state), -1)}",
+    ".tfstate",
+    ""
+  )
+}
+
+output "stack_name" {
+  value = local.stack_name
+}
+
+resource "aws_kms_key" "ebs_key" {
+  description         = "Customer managed EBS Key"
+  enable_key_rotation = true
+  policy              = jsonencode({
+    Version = "2012-10-17"
+    Id      = "ebskey"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = {
+          AWS = "${format("arn:aws:iam::%s:root", aws_account_id)}"
+        }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Effect    = "Allow"
+        Principal = {
+          AWS = [
+            "${format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", aws_account_id)}"
+          ]
+        }
+        Action    = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource  = "*"
+      },
+      {
+        Effect    = "Allow"
+        Principal = {
+          AWS = [
+            "${format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", aws_account_id)}"
+          ]
+        }
+        Action    = "kms:CreateGrant"
+        Resource  = "*"
+        Condition = {
+          Bool = {
+            "kms:GrantIsForAWSResource" = true
+          }
+        }
+      }
+    ]
+  })
+  pending_window_in_days = 7
+  tags = {
+    Name = "${var.stack_name}-ebs-key"
+  }
+}
+
+resource "aws_kms_alias" "ebs_key_alias" {
+  name          = "alias/ebskey"
+  target_key_id = aws_kms_key.ebs_key.key_id
+}
+
+resource "aws_kms_key" "rds_key" {
+  description         = "Customer managed RDS Key"
+  enable_key_rotation = true
+  policy              = jsonencode({
+    Version = "2012-10-17"
+    Id      = "rdskey"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = {
+          AWS = "${format("arn:aws:iam::%s:root", aws_account_id)}"
+        }
+        Action    = "kms:*"
+        Resource  = "*"
+      }
+    ]
+  })
+  pending_window_in_days = 7
+  tags = {
+    Name = "${var.stack_name}-rds-key"
+  }
+}
+
+resource "aws_kms_alias" "rds_key_alias" {
+  name          = "alias/rdskey"
+  target_key_id = aws_kms_key.rds_key.key_id
+}
+
