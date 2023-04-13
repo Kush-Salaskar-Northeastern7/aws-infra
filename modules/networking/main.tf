@@ -193,14 +193,14 @@ resource "aws_launch_template" "asg_launch_template" {
 
 resource "aws_autoscaling_group" "asg" {
   name                 = "webapp_asg"
-  launch_template { 
-    id = "${aws_launch_template.asg_launch_template.id}" 
-    version = "${aws_launch_template.asg_launch_template.latest_version}" 
-  }
-  # launch_template {
-  #   id      = aws_launch_template.asg_launch_template.id
-  #   version = "$Latest"
+  # launch_template { 
+  #   id = "${aws_launch_template.asg_launch_template.id}" 
+  #   version = "${aws_launch_template.asg_launch_template.latest_version}" 
   # }
+  launch_template {
+    id      = aws_launch_template.asg_launch_template.id
+    version = "$Latest"
+  }
   # launch_configuration = aws_launch_configuration.asg_launch_config.id
   # cooldown             = 60
   min_size             = 1
@@ -316,6 +316,7 @@ resource "aws_lb_listener" "lb_listener" {
   load_balancer_arn = aws_lb.web-alb.arn
   port              = "443"
   protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
   certificate_arn   = "arn:aws:acm:us-east-1:562694632201:certificate/7563dd81-84d5-49e1-a166-65543f9bc3c0"
 
   default_action {
@@ -594,17 +595,17 @@ output "aws_account_id" {
   value = data.aws_caller_identity.current.account_id
 }
 
-locals {
-  stack_name = replace(
-    "${element(split("/", var.terraform_state), -1)}",
-    ".tfstate",
-    ""
-  )
-}
+# locals {
+#   stack_name = replace(
+#     "${element(split("/", var.terraform_state), -1)}",
+#     ".tfstate",
+#     ""
+#   )
+# }
 
-output "stack_name" {
-  value = local.stack_name
-}
+# output "stack_name" {
+#   value = local.stack_name
+# }
 
 resource "aws_kms_key" "ebs_key" {
   description         = "Customer managed EBS Key"
@@ -616,7 +617,8 @@ resource "aws_kms_key" "ebs_key" {
       {
         Effect    = "Allow"
         Principal = {
-          AWS = "${format("arn:aws:iam::%s:root", aws_account_id)}"
+          # AWS = format("arn:aws:iam::%s:root", var.aws_account_id)
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         }
         Action    = "kms:*"
         Resource  = "*"
@@ -625,7 +627,8 @@ resource "aws_kms_key" "ebs_key" {
         Effect    = "Allow"
         Principal = {
           AWS = [
-            "${format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", aws_account_id)}"
+            # format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", var.aws_account_id)
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
           ]
         }
         Action    = [
@@ -641,7 +644,8 @@ resource "aws_kms_key" "ebs_key" {
         Effect    = "Allow"
         Principal = {
           AWS = [
-            "${format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", aws_account_id)}"
+            # format("arn:aws:iam::%s:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling", var.aws_account_id)
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
           ]
         }
         Action    = "kms:CreateGrant"
@@ -654,9 +658,9 @@ resource "aws_kms_key" "ebs_key" {
       }
     ]
   })
-  pending_window_in_days = 7
+  deletion_window_in_days = 7
   tags = {
-    Name = "${var.stack_name}-ebs-key"
+    Name = "terraform-ebs-key"
   }
 }
 
@@ -675,16 +679,17 @@ resource "aws_kms_key" "rds_key" {
       {
         Effect    = "Allow"
         Principal = {
-          AWS = "${format("arn:aws:iam::%s:root", aws_account_id)}"
+          # AWS = format("arn:aws:iam::%s:root", var.aws_account_id)
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         }
         Action    = "kms:*"
         Resource  = "*"
       }
     ]
   })
-  pending_window_in_days = 7
+  deletion_window_in_days = 7
   tags = {
-    Name = "${var.stack_name}-rds-key"
+    Name = "terraform-rds-key"
   }
 }
 
